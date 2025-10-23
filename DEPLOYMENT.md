@@ -295,9 +295,9 @@ INSERT INTO public.items (event_id, name, available_stock_kg) VALUES
 - Change user status to `approved`
 
 **Error: "Auth session missing" when logging out**
-- This happens if `signOut()` is called without an active session token in memory.
-- Fix (already applied in code): check for a session first and call `supabase.auth.signOut({ scope: 'local' })` when no session exists.
-- If you still see it, ensure you’ve deployed the latest code and that only one tab is logged in.
+- This happens if `signOut()` tries to revoke a non-existent session token.
+- Fix (already applied): We use `supabase.auth.signOut({ scope: 'local' })` to clear the session locally without a network call.
+- If you still see it after deploying the latest code, clear your browser cache and ensure only one tab is logged in.
 
 **Cannot login after signup**
 - Check Supabase logs: **Authentication** → **Logs**

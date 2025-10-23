@@ -29,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole, activeView, onNavigate }) =
     const navItems = userRole === Role.HOST ? hostNavItems : memberNavItems;
 
     return (
-        <aside className="w-20 md:w-64 bg-white/50 backdrop-blur-xl border-r border-white/30 rounded-2xl p-4 transition-all duration-300 flex flex-col">
+        <aside className="h-full w-20 md:w-64 bg-white/50 backdrop-blur-xl border-r border-white/30 rounded-2xl p-4 transition-all duration-300 flex flex-col overflow-hidden">
             <div className="mb-10 flex items-center justify-center md:justify-start gap-2">
                 <img src="https://picsum.photos/40/40" alt="Logo" className="rounded-full" />
                 <h1 className="hidden md:block text-2xl font-bold text-brand-dark">Sainath</h1>

@@ -31,17 +31,10 @@ export const authService = {
 
   // Sign out
   async signOut() {
-    // Try to revoke session if it exists; otherwise clear local state only to avoid
-    // "Auth session missing" errors when there is no active session in memory.
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData?.session) {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } else {
-      // No active session token; clear local auth state without network call
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) throw error;
-    }
+    // Use local-only sign out to avoid "Auth session missing" errors
+    // This clears the session from browser storage without requiring a network call
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) throw error;
   },
 
   // Get current session

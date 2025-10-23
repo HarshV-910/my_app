@@ -41,16 +41,16 @@ const MemberDashboard: React.FC = () => {
     };
 
     return (
-        <div className="flex h-screen p-2 md:p-4 gap-2 md:gap-4">
+        <div className="flex h-[100dvh] overflow-hidden p-2 md:p-4 gap-2 md:gap-4">
             <Sidebar userRole={Role.MEMBER} activeView={activeView} onNavigate={setActiveView} />
-            <main className="flex-1 flex flex-col">
+            <main className="flex-1 flex flex-col min-h-0">
                 <Header 
                     onProfileClick={() => setActiveView('profile')}
                     currentEvent={currentEvent}
                     onEventChange={setSelectedEventId}
                     events={events}
                 />
-                <div className="flex-grow overflow-y-auto pr-2">
+                <div className="flex-grow min-h-0 overflow-y-auto pr-2">
                     {renderView()}
                 </div>
             </main>
