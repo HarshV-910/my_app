@@ -75,6 +75,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Initialize auth and load data
     useEffect(() => {
         initializeAuth();
+        
+        // Set up auth state listener once
+        const { data: authListener } = authService.onAuthStateChange(async (user) => {
+            if (user && user.status === UserStatus.APPROVED) {
+                setCurrentUser(user);
+                await loadAllData();
+            } else {
+                setCurrentUser(null);
+                clearAllData();
+            }
+        });
+
+        return () => {
+            authListener?.subscription?.unsubscribe();
+        };
     }, []);
 
     // Realtime subscriptions
@@ -140,17 +155,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } finally {
             setLoading(false);
         }
-
-        // Listen for auth changes
-        authService.onAuthStateChange(async (user) => {
-            if (user && user.status === UserStatus.APPROVED) {
-                setCurrentUser(user);
-                await loadAllData();
-            } else {
-                setCurrentUser(null);
-                clearAllData();
-            }
-        });
     };
 
     const loadAllData = async () => {
@@ -248,19 +252,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const login = async (email: string, password: string) => {
         try {
             clearError();
+            setLoading(true);
             await authService.signIn(email, password);
             const user = await authService.getCurrentUserProfile();
             
             if (user?.status === UserStatus.PENDING) {
                 await authService.signOut();
                 setError('Your account is pending approval from the host.');
+                setLoading(false);
                 return;
             }
             
+            // Set user first, then load data
             setCurrentUser(user);
             await loadAllData();
+            setLoading(false);
         } catch (err: any) {
             setError(err.message || 'Invalid email or password.');
+            setLoading(false);
         }
     };
 
