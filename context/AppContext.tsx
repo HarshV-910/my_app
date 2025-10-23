@@ -128,10 +128,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeAuth = async () => {
         try {
             const user = await authService.getCurrentUserProfile();
-            setCurrentUser(user);
-            
-            if (user) {
+            if (user && user.status === UserStatus.APPROVED) {
+                setCurrentUser(user);
                 await loadAllData();
+            } else {
+                // Keep unauthenticated state for pending users
+                setCurrentUser(null);
             }
         } catch (err: any) {
             console.error('Auth initialization error:', err);
@@ -141,10 +143,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         // Listen for auth changes
         authService.onAuthStateChange(async (user) => {
-            setCurrentUser(user);
-            if (user) {
+            if (user && user.status === UserStatus.APPROVED) {
+                setCurrentUser(user);
                 await loadAllData();
             } else {
+                setCurrentUser(null);
                 clearAllData();
             }
         });
