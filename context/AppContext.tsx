@@ -1,20 +1,14 @@
-
-
 import React, { createContext, ReactNode, useState, useEffect } from 'react';
 import { User, Role, UserStatus, Event, Item, Order, Expense, StoredFile, Note, PaymentStatus } from '../types';
-import useLocalStorage from '../hooks/useLocalStorage';
-
-// A simple hashing function for demonstration. In a real app, use a proper library like bcrypt.
-const simpleHash = (s: string) => {
-    let hash = 0;
-    if (s.length === 0) return hash.toString();
-    for (let i = 0; i < s.length; i++) {
-        const char = s.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash = hash & hash; // Convert to 32bit integer
-    }
-    return hash.toString();
-};
+import { authService } from '../services/authService';
+import { userService } from '../services/userService';
+import { eventService } from '../services/eventService';
+import { itemService } from '../services/itemService';
+import { orderService } from '../services/orderService';
+import { expenseService } from '../services/expenseService';
+import { noteService } from '../services/noteService';
+import { fileService } from '../services/fileService';
+import { supabase } from '../lib/supabase';
 
 export interface NotificationType {
     message: string;
@@ -32,74 +26,214 @@ export interface AppContextType {
     notes: Note[];
     error: string | null;
     notification: NotificationType | null;
-    login: (email: string, pass: string) => void;
-    logout: () => void;
-    requestToJoin: (name: string, email: string, pass: string) => void;
+    loading: boolean;
+    login: (email: string, pass: string) => Promise<void>;
+    logout: () => Promise<void>;
+    requestToJoin: (name: string, email: string, pass: string) => Promise<void>;
     clearError: () => void;
     clearNotification: () => void;
     showNotification: (message: string, type?: 'success' | 'error') => void;
-    approveMember: (memberId: string) => void;
-    createEvent: (name: string, year: number, imageUrl: string) => void;
-    addItem: (eventId: string, name: string, initialStock: number) => void;
-    addStock: (itemId: string, amount: number) => void;
-    editItemStock: (itemId: string, newStock: number) => void;
-    addExpense: (addedById: string, eventId: string, name: string, amount: number) => void;
-    verifyExpense: (expenseId: string) => void;
-    editExpense: (expenseId: string, newName: string, newAmount: number) => void;
-    deleteExpense: (expenseId: string) => void;
-    uploadFile: (uploadedById: string, name: string, type: string, url: string) => void;
-    deleteFile: (fileId: string) => void;
-    verifyOrder: (orderId: string) => void;
-    rejectOrder: (orderId: string) => void;
-    addOrder: (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => void;
-    editOrder: (orderId: string, newValues: { customerName: string; itemId: string; quantityKg: number; amountInr: number; }) => void;
-    deleteOrder: (orderId: string) => void;
-    updateOrderPaymentStatus: (orderId: string, status: PaymentStatus) => void;
-    addNote: (memberId: string, eventId: string, content: string, imageUrls?: string[]) => void;
-    editNote: (noteId: string, newContent: string, newImageUrls?: string[]) => void;
-    deleteNote: (noteId: string) => void;
-    changePassword: (userId: string, newPass: string) => void;
-    changeEmail: (userId: string, newEmail: string, currentPass: string) => boolean;
-    addConsumptionByHost: (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => boolean;
+    approveMember: (memberId: string) => Promise<void>;
+    createEvent: (name: string, year: number, imageUrl?: string) => Promise<void>;
+    addItem: (eventId: string, name: string, initialStock: number) => Promise<void>;
+    addStock: (itemId: string, amount: number) => Promise<void>;
+    editItemStock: (itemId: string, newStock: number) => Promise<void>;
+    addExpense: (addedById: string, eventId: string, name: string, amount: number) => Promise<void>;
+    verifyExpense: (expenseId: string) => Promise<void>;
+    editExpense: (expenseId: string, newName: string, newAmount: number) => Promise<void>;
+    deleteExpense: (expenseId: string) => Promise<void>;
+    uploadFile: (file: File) => Promise<void>;
+    deleteFile: (fileId: string, filePath: string) => Promise<void>;
+    verifyOrder: (orderId: string) => Promise<void>;
+    rejectOrder: (orderId: string) => Promise<void>;
+    addOrder: (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => Promise<void>;
+    editOrder: (orderId: string, newValues: { customerName: string; itemId: string; quantityKg: number; amountInr: number; }) => Promise<void>;
+    deleteOrder: (orderId: string) => Promise<void>;
+    updateOrderPaymentStatus: (orderId: string, status: PaymentStatus) => Promise<void>;
+    addNote: (memberId: string, eventId: string, content: string, imageUrls?: string[]) => Promise<void>;
+    editNote: (noteId: string, newContent: string, newImageUrls?: string[]) => Promise<void>;
+    deleteNote: (noteId: string) => Promise<void>;
+    changePassword: (newPass: string) => Promise<void>;
+    addConsumptionByHost: (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [users, setUsers] = useLocalStorage<User[]>('sainath_users', []);
-    const [events, setEvents] = useLocalStorage<Event[]>('sainath_events', []);
-    const [items, setItems] = useLocalStorage<Item[]>('sainath_items', []);
-    const [orders, setOrders] = useLocalStorage<Order[]>('sainath_orders', []);
-    const [expenses, setExpenses] = useLocalStorage<Expense[]>('sainath_expenses', []);
-    const [storedFiles, setStoredFiles] = useLocalStorage<StoredFile[]>('sainath_files', []);
-    const [notes, setNotes] = useLocalStorage<Note[]>('sainath_notes', []);
-    const [currentUser, setCurrentUser] = useLocalStorage<User | null>('sainath_currentUser', null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [users, setUsers] = useState<User[]>([]);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [items, setItems] = useState<Item[]>([]);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [expenses, setExpenses] = useState<Expense[]>([]);
+    const [storedFiles, setStoredFiles] = useState<StoredFile[]>([]);
+    const [notes, setNotes] = useState<Note[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [notification, setNotification] = useState<NotificationType | null>(null);
+    const [loading, setLoading] = useState(true);
 
+    // Initialize auth and load data
     useEffect(() => {
-        // Initialize default data if it's the first run
-        if (users.length === 0) {
-            const host: User = {
-                id: crypto.randomUUID(),
-                name: 'Sainath host',
-                email: 'harshvekariya910@gmail.com',
-                passwordHash: simpleHash('123456'),
-                role: Role.HOST,
-                status: UserStatus.APPROVED,
-            };
-            setUsers([host]);
-
-            const rakhi: Event = { id: crypto.randomUUID(), name: 'Rakshabandhan', year: 2024, imageUrl: 'https://images.unsplash.com/photo-1597987299991-248de49a78fd?q=80&w=2070&auto=format&fit=crop' };
-            const diwali: Event = { id: crypto.randomUUID(), name: 'Diwali', year: 2024, imageUrl: 'https://images.unsplash.com/photo-1542866752-45a730a35914?q=80&w=2070&auto=format&fit=crop' };
-            setEvents([rakhi, diwali]);
-            
-            const kajuKatli: Item = { id: crypto.randomUUID(), eventId: diwali.id, name: 'Kaju-Katli', availableStockKg: 50 };
-            const chikki: Item = { id: crypto.randomUUID(), eventId: diwali.id, name: 'Chikki', availableStockKg: 100 };
-            const kajuKatliRakhi: Item = { id: crypto.randomUUID(), eventId: rakhi.id, name: 'Kaju-Katli', availableStockKg: 30 };
-            setItems([kajuKatli, chikki, kajuKatliRakhi]);
-        }
+        initializeAuth();
     }, []);
+
+    // Realtime subscriptions
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const eventsChannel = supabase
+            .channel('events_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+                loadEvents();
+            })
+            .subscribe();
+
+        const itemsChannel = supabase
+            .channel('items_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, () => {
+                loadItems();
+            })
+            .subscribe();
+
+        const ordersChannel = supabase
+            .channel('orders_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                loadOrders();
+            })
+            .subscribe();
+
+        const expensesChannel = supabase
+            .channel('expenses_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+                loadExpenses();
+            })
+            .subscribe();
+
+        const notesChannel = supabase
+            .channel('notes_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => {
+                loadNotes();
+            })
+            .subscribe();
+
+        return () => {
+            eventsChannel.unsubscribe();
+            itemsChannel.unsubscribe();
+            ordersChannel.unsubscribe();
+            expensesChannel.unsubscribe();
+            notesChannel.unsubscribe();
+        };
+    }, [currentUser]);
+
+    const initializeAuth = async () => {
+        try {
+            const user = await authService.getCurrentUserProfile();
+            setCurrentUser(user);
+            
+            if (user) {
+                await loadAllData();
+            }
+        } catch (err: any) {
+            console.error('Auth initialization error:', err);
+        } finally {
+            setLoading(false);
+        }
+
+        // Listen for auth changes
+        authService.onAuthStateChange(async (user) => {
+            setCurrentUser(user);
+            if (user) {
+                await loadAllData();
+            } else {
+                clearAllData();
+            }
+        });
+    };
+
+    const loadAllData = async () => {
+        await Promise.all([
+            loadUsers(),
+            loadEvents(),
+            loadItems(),
+            loadOrders(),
+            loadExpenses(),
+            loadStoredFiles(),
+            loadNotes(),
+        ]);
+    };
+
+    const loadUsers = async () => {
+        try {
+            const data = await userService.getAllUsers();
+            setUsers(data);
+        } catch (err: any) {
+            console.error('Error loading users:', err);
+        }
+    };
+
+    const loadEvents = async () => {
+        try {
+            const data = await eventService.getAllEvents();
+            setEvents(data);
+        } catch (err: any) {
+            console.error('Error loading events:', err);
+        }
+    };
+
+    const loadItems = async () => {
+        try {
+            const data = await itemService.getAllItems();
+            setItems(data);
+        } catch (err: any) {
+            console.error('Error loading items:', err);
+        }
+    };
+
+    const loadOrders = async () => {
+        try {
+            const data = await orderService.getAllOrders();
+            setOrders(data);
+        } catch (err: any) {
+            console.error('Error loading orders:', err);
+        }
+    };
+
+    const loadExpenses = async () => {
+        try {
+            const data = await expenseService.getAllExpenses();
+            setExpenses(data);
+        } catch (err: any) {
+            console.error('Error loading expenses:', err);
+        }
+    };
+
+    const loadStoredFiles = async () => {
+        try {
+            const data = await fileService.getAllFiles();
+            setStoredFiles(data);
+        } catch (err: any) {
+            console.error('Error loading files:', err);
+        }
+    };
+
+    const loadNotes = async () => {
+        try {
+            const data = await noteService.getAllNotes();
+            setNotes(data);
+        } catch (err: any) {
+            console.error('Error loading notes:', err);
+        }
+    };
+
+    const clearAllData = () => {
+        setUsers([]);
+        setEvents([]);
+        setItems([]);
+        setOrders([]);
+        setExpenses([]);
+        setStoredFiles([]);
+        setNotes([]);
+    };
 
     const clearError = () => setError(null);
     const clearNotification = () => setNotification(null);
@@ -108,272 +242,356 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setNotification({ message, type });
     };
 
-    const login = (email: string, pass: string) => {
-        clearError();
-        const passwordHash = simpleHash(pass);
-        const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === passwordHash);
-        
-        if (user) {
-            if (user.status === UserStatus.PENDING) {
+    const login = async (email: string, password: string) => {
+        try {
+            clearError();
+            await authService.signIn(email, password);
+            const user = await authService.getCurrentUserProfile();
+            
+            if (user?.status === UserStatus.PENDING) {
+                await authService.signOut();
                 setError('Your account is pending approval from the host.');
-            } else if (user.status === UserStatus.APPROVED) {
-                setCurrentUser(user);
+                return;
             }
-        } else {
-            setError('Invalid email or password.');
+            
+            setCurrentUser(user);
+            await loadAllData();
+        } catch (err: any) {
+            setError(err.message || 'Invalid email or password.');
         }
     };
 
-    const logout = () => {
-        setCurrentUser(null);
-    };
-
-    const requestToJoin = (name: string, email: string, pass: string) => {
-        clearError();
-        if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-            setError('An account with this email already exists.');
-            return;
+    const logout = async () => {
+        try {
+            await authService.signOut();
+            setCurrentUser(null);
+            clearAllData();
+        } catch (err: any) {
+            showNotification(err.message || 'Error logging out', 'error');
         }
-        const newUser: User = {
-            id: crypto.randomUUID(),
-            name,
-            email,
-            passwordHash: simpleHash(pass || '121212'), // Use 121212 if empty
-            role: Role.MEMBER,
-            status: UserStatus.PENDING,
-        };
-        setUsers(prev => [...prev, newUser]);
-        showNotification('Join request sent! Please wait for host approval.', 'success');
     };
 
-    const approveMember = (memberId: string) => {
-        setUsers(prev => prev.map(u => u.id === memberId ? { ...u, status: UserStatus.APPROVED } : u));
-    };
-    
-    const createEvent = (name: string, year: number, imageUrl: string) => {
-        const newEvent: Event = {
-            id: crypto.randomUUID(),
-            name,
-            year,
-            imageUrl: imageUrl || `https://picsum.photos/seed/${name}${year}/400/300`,
-        };
-        setEvents(prev => [...prev, newEvent]);
-    };
-    
-    const addItem = (eventId: string, name: string, initialStock: number) => {
-        const newItem: Item = {
-            id: crypto.randomUUID(),
-            eventId,
-            name,
-            availableStockKg: initialStock,
-        };
-        setItems(prev => [...prev, newItem]);
-    };
-
-    const addStock = (itemId: string, amount: number) => {
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, availableStockKg: i.availableStockKg + amount } : i));
-    };
-
-    const editItemStock = (itemId: string, newStock: number) => {
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, availableStockKg: newStock } : i));
-    };
-
-    const addOrder = (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => {
-        const item = items.find(i => i.id === itemId);
-        if (!item) {
-            showNotification("Selected item not found. Please refresh and try again.");
-            return;
+    const requestToJoin = async (name: string, email: string, password: string) => {
+        try {
+            clearError();
+            await authService.signUp(email, password, name);
+            showNotification('Join request sent! Please wait for host approval.', 'success');
+        } catch (err: any) {
+            setError(err.message || 'Error sending join request.');
         }
-        
-        if (item.availableStockKg < quantityKg) {
-            showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
-            return;
+    };
+
+    const approveMember = async (memberId: string) => {
+        try {
+            await userService.approveMember(memberId);
+            await loadUsers();
+            showNotification('Member approved successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error approving member', 'error');
         }
-
-        const newOrder: Order = {
-            id: crypto.randomUUID(),
-            memberId, eventId, itemId, customerName, quantityKg, amountInr,
-            paymentStatus: PaymentStatus.BAKI,
-            verified: false,
-            dateTime: new Date().toISOString(),
-        };
-        setOrders(prev => [...prev, newOrder]);
     };
-    
-    const addConsumptionByHost = (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number): boolean => {
-        const item = items.find(i => i.id === itemId);
-        if (!item) {
-            showNotification("Selected item not found. Please refresh and try again.");
-            return false;
+
+    const createEvent = async (name: string, year: number, imageUrl?: string) => {
+        try {
+            await eventService.createEvent(name, year, imageUrl);
+            await loadEvents();
+            showNotification('Event created successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error creating event', 'error');
         }
-        
-        if (item.availableStockKg < quantityKg) {
-            showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
-            return false;
+    };
+
+    const addItem = async (eventId: string, name: string, initialStock: number) => {
+        try {
+            await itemService.createItem(eventId, name, initialStock);
+            await loadItems();
+            showNotification('Item added successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error adding item', 'error');
         }
-
-        const newOrder: Order = {
-            id: crypto.randomUUID(),
-            memberId, eventId, itemId, customerName, quantityKg, amountInr,
-            paymentStatus: PaymentStatus.BAKI,
-            verified: true, // Auto-verified
-            dateTime: new Date().toISOString(),
-        };
-        setOrders(prev => [...prev, newOrder]);
-        // Reduce stock immediately
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, availableStockKg: i.availableStockKg - quantityKg } : i));
-        return true;
     };
 
-    const editOrder = (orderId: string, newValues: { customerName: string; itemId: string; quantityKg: number; amountInr: number; }) => {
-        const item = items.find(i => i.id === newValues.itemId);
-        if (!item) {
-            showNotification("Selected item not found. Please refresh and try again.");
-            return;
+    const addStock = async (itemId: string, amount: number) => {
+        try {
+            await itemService.addStock(itemId, amount);
+            await loadItems();
+            showNotification('Stock added successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error adding stock', 'error');
         }
-        
-        if (item.availableStockKg < newValues.quantityKg) {
-            showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
-            return;
+    };
+
+    const editItemStock = async (itemId: string, newStock: number) => {
+        try {
+            await itemService.updateStock(itemId, newStock);
+            await loadItems();
+            showNotification('Stock updated successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error updating stock', 'error');
         }
-
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...newValues, verified: false, edited: true, dateTime: new Date().toISOString() } : o));
     };
 
-    const deleteOrder = (orderId: string) => {
-        setOrders(prev => prev.filter(o => o.id !== orderId));
-    };
+    const addOrder = async (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => {
+        try {
+            const item = items.find(i => i.id === itemId);
+            if (!item) {
+                showNotification("Selected item not found. Please refresh and try again.");
+                return;
+            }
 
-    const verifyOrder = (orderId: string) => {
-        const order = orders.find(o => o.id === orderId);
-        if (!order) {
-            showNotification("Order not found.");
-            return;
+            if (item.availableStockKg < quantityKg) {
+                showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
+                return;
+            }
+
+            await orderService.createOrder({
+                memberId,
+                eventId,
+                itemId,
+                customerName,
+                quantityKg,
+                amountInr,
+            });
+            await loadOrders();
+            showNotification('Order created successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error creating order', 'error');
         }
-        const item = items.find(i => i.id === order.itemId);
-        if (!item) {
-            showNotification("Item associated with this order not found.");
-            return;
+    };
+
+    const addConsumptionByHost = async (memberId: string, eventId: string, itemId: string, customerName: string, quantityKg: number, amountInr: number) => {
+        try {
+            const item = items.find(i => i.id === itemId);
+            if (!item) {
+                showNotification("Selected item not found. Please refresh and try again.");
+                return;
+            }
+
+            if (item.availableStockKg < quantityKg) {
+                showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
+                return;
+            }
+
+            // Auto-verified order
+            await orderService.createOrder({
+                memberId,
+                eventId,
+                itemId,
+                customerName,
+                quantityKg,
+                amountInr,
+                verified: true,
+            });
+
+            // Reduce stock immediately
+            await itemService.updateStock(itemId, item.availableStockKg - quantityKg);
+            await loadOrders();
+            await loadItems();
+            showNotification('Consumption added successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error adding consumption', 'error');
         }
-    
-        if (item.availableStockKg < order.quantityKg) {
-            showNotification(`Cannot verify. Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg, Requested: ${order.quantityKg.toFixed(2)} kg.`);
-            return;
+    };
+
+    const editOrder = async (orderId: string, newValues: { customerName: string; itemId: string; quantityKg: number; amountInr: number; }) => {
+        try {
+            const item = items.find(i => i.id === newValues.itemId);
+            if (!item) {
+                showNotification("Selected item not found. Please refresh and try again.");
+                return;
+            }
+
+            if (item.availableStockKg < newValues.quantityKg) {
+                showNotification(`Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg.`);
+                return;
+            }
+
+            await orderService.updateOrder(orderId, newValues);
+            await loadOrders();
+            showNotification('Order updated successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error updating order', 'error');
         }
-    
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, verified: true, edited: false } : o));
-        // Reduce stock
-        setItems(prev => prev.map(i => i.id === order.itemId ? { ...i, availableStockKg: i.availableStockKg - order.quantityKg } : i));
     };
 
-    const rejectOrder = (orderId: string) => {
-        setOrders(prev => prev.filter(o => o.id !== orderId));
-    };
-    
-    const updateOrderPaymentStatus = (orderId: string, status: PaymentStatus) => {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, paymentStatus: status } : o));
-    };
-
-    const addExpense = (addedById: string, eventId: string, name: string, amountInr: number) => {
-        const newExpense: Expense = {
-            id: crypto.randomUUID(),
-            addedById,
-            eventId,
-            name,
-            amountInr,
-            verified: currentUser?.role === Role.HOST, // Host expenses are auto-verified
-            dateTime: new Date().toISOString(),
-        };
-        setExpenses(prev => [...prev, newExpense]);
-    };
-
-    const editExpense = (expenseId: string, newName: string, newAmount: number) => {
-        setExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, name: newName, amountInr: newAmount } : e));
-    };
-
-    const deleteExpense = (expenseId: string) => {
-        setExpenses(prev => prev.filter(e => e.id !== expenseId));
-    };
-
-    const verifyExpense = (expenseId: string) => {
-        setExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, verified: true } : e));
-    };
-
-    const uploadFile = (uploadedById: string, name: string, type: string, url: string) => {
-        const newFile: StoredFile = {
-            id: crypto.randomUUID(),
-            uploadedById,
-            name,
-            type,
-            url,
-            uploadDate: new Date().toISOString(),
-        };
-        setStoredFiles(prev => [...prev, newFile]);
-    };
-
-    const deleteFile = (fileId: string) => {
-        setStoredFiles(prev => prev.filter(f => f.id !== fileId));
-    };
-    
-    const addNote = (memberId: string, eventId: string, content: string, imageUrls: string[] = []) => {
-        const newNote: Note = {
-            id: crypto.randomUUID(),
-            memberId,
-            eventId,
-            content,
-            imageUrls,
-            dateTime: new Date().toISOString(),
-        };
-        setNotes(prev => [...prev, newNote]);
-    };
-
-    const editNote = (noteId: string, newContent: string, newImageUrls: string[] = []) => {
-        setNotes(prev => prev.map(n => 
-            n.id === noteId 
-            ? { ...n, content: newContent, imageUrls: newImageUrls, dateTime: new Date().toISOString() } 
-            : n
-        ));
-    };
-
-    const deleteNote = (noteId: string) => {
-        setNotes(prev => prev.filter(n => n.id !== noteId));
-    };
-
-    const changePassword = (userId: string, newPass: string) => {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, passwordHash: simpleHash(newPass) } : u));
-        // If the current user is changing their own password, update the currentUser object as well
-        if (currentUser?.id === userId) {
-            setCurrentUser(prev => prev ? { ...prev, passwordHash: simpleHash(newPass) } : null);
+    const deleteOrder = async (orderId: string) => {
+        try {
+            await orderService.deleteOrder(orderId);
+            await loadOrders();
+            showNotification('Order deleted successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error deleting order', 'error');
         }
-        showNotification('Password changed successfully!', 'success');
     };
-    
-    const changeEmail = (userId: string, newEmail: string, currentPass: string): boolean => {
-        const user = users.find(u => u.id === userId);
-        if (!user) {
-            showNotification("User not found.", 'error');
-            return false;
-        }
 
-        if (simpleHash(currentPass) !== user.passwordHash) {
-            showNotification("Incorrect password.", 'error');
-            return false;
-        }
+    const verifyOrder = async (orderId: string) => {
+        try {
+            const order = orders.find(o => o.id === orderId);
+            if (!order) {
+                showNotification("Order not found.");
+                return;
+            }
 
-        const emailInUse = users.some(u => u.email.toLowerCase() === newEmail.toLowerCase() && u.id !== userId);
-        if (emailInUse) {
-            showNotification("This email is already in use by another account.", 'error');
-            return false;
-        }
+            const item = items.find(i => i.id === order.itemId);
+            if (!item) {
+                showNotification("Item associated with this order not found.");
+                return;
+            }
 
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, email: newEmail } : u));
-        
-        if (currentUser?.id === userId) {
-            setCurrentUser(prev => prev ? { ...prev, email: newEmail } : null);
+            if (item.availableStockKg < order.quantityKg) {
+                showNotification(`Cannot verify. Insufficient stock for ${item.name}. Available: ${item.availableStockKg.toFixed(2)} kg, Requested: ${order.quantityKg.toFixed(2)} kg.`);
+                return;
+            }
+
+            await orderService.verifyOrder(orderId);
+            // Reduce stock
+            await itemService.updateStock(order.itemId, item.availableStockKg - order.quantityKg);
+            await loadOrders();
+            await loadItems();
+            showNotification('Order verified successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error verifying order', 'error');
         }
-        
-        showNotification('Email changed successfully!', 'success');
-        return true;
+    };
+
+    const rejectOrder = async (orderId: string) => {
+        try {
+            await orderService.deleteOrder(orderId);
+            await loadOrders();
+            showNotification('Order rejected!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error rejecting order', 'error');
+        }
+    };
+
+    const updateOrderPaymentStatus = async (orderId: string, status: PaymentStatus) => {
+        try {
+            await orderService.updatePaymentStatus(orderId, status);
+            await loadOrders();
+            showNotification('Payment status updated!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error updating payment status', 'error');
+        }
+    };
+
+    const addExpense = async (addedById: string, eventId: string, name: string, amountInr: number) => {
+        try {
+            const isHost = currentUser?.role === Role.HOST;
+            await expenseService.createExpense({
+                addedById,
+                eventId,
+                name,
+                amountInr,
+                verified: isHost, // Host expenses are auto-verified
+            });
+            await loadExpenses();
+            showNotification('Expense added successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error adding expense', 'error');
+        }
+    };
+
+    const editExpense = async (expenseId: string, newName: string, newAmount: number) => {
+        try {
+            await expenseService.updateExpense(expenseId, newName, newAmount);
+            await loadExpenses();
+            showNotification('Expense updated successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error updating expense', 'error');
+        }
+    };
+
+    const deleteExpense = async (expenseId: string) => {
+        try {
+            await expenseService.deleteExpense(expenseId);
+            await loadExpenses();
+            showNotification('Expense deleted successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error deleting expense', 'error');
+        }
+    };
+
+    const verifyExpense = async (expenseId: string) => {
+        try {
+            await expenseService.verifyExpense(expenseId);
+            await loadExpenses();
+            showNotification('Expense verified successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error verifying expense', 'error');
+        }
+    };
+
+    const uploadFile = async (file: File) => {
+        try {
+            if (!currentUser) {
+                showNotification('You must be logged in to upload files.');
+                return;
+            }
+
+            await fileService.uploadFile(currentUser.id, file);
+            await loadStoredFiles();
+            showNotification('File uploaded successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error uploading file', 'error');
+        }
+    };
+
+    const deleteFile = async (fileId: string, filePath: string) => {
+        try {
+            await fileService.deleteFile(fileId, filePath);
+            await loadStoredFiles();
+            showNotification('File deleted successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error deleting file', 'error');
+        }
+    };
+
+    const addNote = async (memberId: string, eventId: string, content: string, imageUrls?: string[]) => {
+        try {
+            await noteService.createNote({
+                memberId,
+                eventId,
+                content,
+                imageUrls,
+            });
+            await loadNotes();
+            showNotification('Note added successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error adding note', 'error');
+        }
+    };
+
+    const editNote = async (noteId: string, newContent: string, newImageUrls?: string[]) => {
+        try {
+            await noteService.updateNote(noteId, newContent, newImageUrls);
+            await loadNotes();
+            showNotification('Note updated successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error updating note', 'error');
+        }
+    };
+
+    const deleteNote = async (noteId: string) => {
+        try {
+            await noteService.deleteNote(noteId);
+            await loadNotes();
+            showNotification('Note deleted successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error deleting note', 'error');
+        }
+    };
+
+    const changePassword = async (newPass: string) => {
+        try {
+            const { error } = await supabase.auth.updateUser({
+                password: newPass,
+            });
+
+            if (error) throw error;
+            showNotification('Password changed successfully!', 'success');
+        } catch (err: any) {
+            showNotification(err.message || 'Error changing password', 'error');
+        }
     };
 
     const value: AppContextType = {
@@ -387,6 +605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notes,
         error,
         notification,
+        loading,
         login,
         logout,
         requestToJoin,
@@ -414,9 +633,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         editNote,
         deleteNote,
         changePassword,
-        changeEmail,
         addConsumptionByHost,
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-100">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

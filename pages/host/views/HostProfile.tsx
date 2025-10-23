@@ -7,7 +7,7 @@ import { User } from '../../../types';
 import Modal from '../../../components/common/Modal';
 
 const HostProfile: React.FC = () => {
-  const { currentUser, users, approveMember, createEvent, changePassword, changeEmail, showNotification } = useAppContext();
+  const { currentUser, users, approveMember, createEvent, changePassword, showNotification } = useAppContext();
   const [eventImage, setEventImage] = useState<string | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
   const [isHostPasswordModalOpen, setHostPasswordModalOpen] = useState(false);
@@ -39,7 +39,7 @@ const HostProfile: React.FC = () => {
       }
   };
   
-  const handleHostPasswordChange = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleHostPasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newPass = (e.currentTarget.elements.namedItem('newPassword') as HTMLInputElement).value;
     const confirmPass = (e.currentTarget.elements.namedItem('confirmPassword') as HTMLInputElement).value;
@@ -48,31 +48,21 @@ const HostProfile: React.FC = () => {
         return;
     }
     if (currentUser) {
-        changePassword(currentUser.id, newPass);
+        await changePassword(newPass);
         setHostPasswordModalOpen(false);
     }
   };
   
-  const handleMemberPasswordReset = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleMemberPasswordReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const newPass = (e.currentTarget.elements.namedItem('newPassword') as HTMLInputElement).value;
-    if (resetUser && newPass) {
-        changePassword(resetUser.id, newPass);
-        setResetUser(null);
-    }
+    showNotification("Member password reset is not available with Supabase Auth. Users can reset their password via email.", 'error');
+    setResetUser(null);
   };
   
-  const handleHostEmailChange = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleHostEmailChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const newEmail = (e.currentTarget.elements.namedItem('newEmail') as HTMLInputElement).value;
-    const currentPass = (e.currentTarget.elements.namedItem('currentPassword') as HTMLInputElement).value;
-    
-    if (currentUser && newEmail && currentPass) {
-        const success = changeEmail(currentUser.id, newEmail, currentPass);
-        if (success) {
-            setEmailModalOpen(false);
-        }
-    }
+    showNotification("Email change is not directly available. Please contact support or use Supabase Auth UI for email updates.", 'error');
+    setEmailModalOpen(false);
   };
 
   const inputClasses = "w-full p-2 border rounded-lg bg-white";

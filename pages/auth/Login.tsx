@@ -16,14 +16,14 @@ const Login: React.FC = () => {
     // State for password visibility
     const [showPassword, setShowPassword] = useState(false);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        login(email, password);
+        await login(email, password);
     };
 
-    const handleJoinRequest = (e: React.FormEvent) => {
+    const handleJoinRequest = async (e: React.FormEvent) => {
         e.preventDefault();
-        requestToJoin(name, email, password);
+        await requestToJoin(name, email, password);
         // Clear fields and show success message
         setName('');
         setEmail('');

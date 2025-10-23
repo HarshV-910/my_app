@@ -54,18 +54,19 @@ const HostPreviousData: React.FC<HostPreviousDataProps> = ({ event }) => {
         document.body.removeChild(link);
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file && currentUser) {
-            const reader = new FileReader();
-            reader.onload = (readEvent) => {
-                const url = readEvent.target?.result as string;
-                const name = customFileName || file.name;
-                uploadFile(currentUser.id, name, file.type, url);
-                setCustomFileName('');
-                if(fileInputRef.current) fileInputRef.current.value = '';
-            };
-            reader.readAsDataURL(file);
+            // Optionally rename the file if custom name provided
+            let fileToUpload = file;
+            if (customFileName) {
+                const ext = file.name.split('.').pop();
+                fileToUpload = new File([file], `${customFileName}.${ext}`, { type: file.type });
+            }
+            
+            await uploadFile(fileToUpload);
+            setCustomFileName('');
+            if(fileInputRef.current) fileInputRef.current.value = '';
         }
     };
     
@@ -106,18 +107,22 @@ const HostPreviousData: React.FC<HostPreviousDataProps> = ({ event }) => {
                 </div>
 
                 <ul className="mt-4 space-y-2">
-                    {storedFiles.map(file => (
-                        <li key={file.id} className="flex justify-between items-center p-2 md:p-3 bg-white/70 rounded-lg">
-                            <div>
-                               <p className="font-semibold text-sm md:text-base">{file.name}</p>
-                               <p className="text-xs text-gray-500">Uploaded on {new Date(file.uploadDate).toLocaleDateString()}</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <a href={file.url} download={file.name} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full"><Download /></a>
-                                <button onClick={() => deleteFile(file.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 /></button>
-                            </div>
-                        </li>
-                    ))}
+                    {storedFiles.map(file => {
+                        // Import fileService at top of file if needed, or use direct public URL
+                        const fileUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/sainath-uploads/${file.filePath}`;
+                        return (
+                            <li key={file.id} className="flex justify-between items-center p-2 md:p-3 bg-white/70 rounded-lg">
+                                <div>
+                                   <p className="font-semibold text-sm md:text-base">{file.name}</p>
+                                   <p className="text-xs text-gray-500">Uploaded on {new Date(file.uploadDate).toLocaleDateString()}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <a href={fileUrl} download={file.name} target="_blank" rel="noopener noreferrer" className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full"><Download /></a>
+                                    <button onClick={() => deleteFile(file.id, file.filePath)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 /></button>
+                                </div>
+                            </li>
+                        );
+                    })}
                     {storedFiles.length === 0 && <p className="text-center p-4">No files uploaded yet.</p>}
                 </ul>
             </GlassCard>

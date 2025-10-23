@@ -18,18 +18,17 @@ export enum PaymentStatus {
 export interface User {
   id: string;
   name: string;
-  email: string;
-  passwordHash: string; // Storing hashed password
+  email?: string; // From Supabase Auth
   role: Role;
   status: UserStatus;
-  profilePhotoUrl?: string;
 }
 
 export interface Event {
   id: string;
   name: string;
   year: number;
-  imageUrl: string;
+  imageUrl: string | null;
+  createdAt?: string;
 }
 
 export interface Item {
@@ -37,6 +36,7 @@ export interface Item {
   eventId: string;
   name: string;
   availableStockKg: number;
+  createdAt?: string;
 }
 
 export interface Order {
@@ -65,10 +65,9 @@ export interface Expense {
 
 export interface StoredFile {
   id: string;
-  uploadedById: string; // Host ID
+  uploadedById: string;
   name: string;
-  type: string;
-  url: string; // Base64 data URL
+  filePath: string; // Supabase Storage path
   uploadDate: string;
 }
 
@@ -76,7 +75,7 @@ export interface Note {
   id: string;
   memberId: string;
   eventId: string;
-  content: string;
-  imageUrls?: string[];
+  content: string | null;
+  imageUrls?: string[] | null;
   dateTime: string;
 }
